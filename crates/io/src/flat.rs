@@ -209,12 +209,20 @@ pub(crate) fn import_tx(name: &str, bytes: &[u8]) -> Result<ImportResult, IoErro
 /// Whether the page that opens starts a MIP pyramid as `maketx` writes it. From that page (the one
 /// [`codecs::TiffInfo::default_page`] picks, so a leading thumbnail is skipped) over the full-resolution
 /// main-chain pages the "more pages" warning counts: every level is tiled, each one shrinks the one
-/// before by half (rounded down or up, never below 1), and the chain ends at 1×1. Anything less
-/// conclusive keeps the warning, so real extra pages are never left out silently.
+/// before by half (rounded down or up, never below 1), and the chain ends at 1×1. Every page the
+/// warning counts ([`codecs::TiffInfo::page_count`]) must be one of those levels: none before the
+/// page that opens, none without a size. Anything less conclusive keeps the warning, so real extra
+/// pages are never left out silently.
 fn is_mip_chain(info: &codecs::TiffInfo) -> bool {
     let Some(start) = info.default_page() else { return false };
-    let levels: Vec<_> =
-        info.pages.iter().skip(start).filter(|p| p.parent.is_none() && p.kind == codecs::TiffPageKind::Page && p.width > 0 && p.height > 0).collect();
+    let counted = |p: &codecs::TiffPage| p.parent.is_none() && p.kind == codecs::TiffPageKind::Page;
+    if info.pages.iter().take(start).any(counted) {
+        return false;
+    }
+    let levels: Vec<_> = info.pages.iter().skip(start).filter(|p| counted(p)).collect();
+    if levels.len() != info.page_count() || levels.iter().any(|p| p.width == 0 || p.height == 0) {
+        return false;
+    }
     let halves = |big: u32, small: u32| small == (big / 2).max(1) || small == big.div_ceil(2).max(1);
     let next_level =
         |a: &codecs::TiffPage, b: &codecs::TiffPage| (a.width, a.height) != (b.width, b.height) && halves(a.width, b.width) && halves(a.height, b.height);

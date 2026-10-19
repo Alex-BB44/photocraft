@@ -105,6 +105,24 @@ fn halving_pages_that_are_not_a_full_tiled_pyramid_keep_the_pages_warning() {
     }
 }
 
+/// Every page the warning counts must be a level of the chain: a directory without a size, after
+/// the pyramid or in front of it, is still a page the import leaves out.
+#[test]
+fn a_page_without_a_size_beside_the_pyramid_keeps_the_pages_warning() {
+    let empty = || Dir { entries: base(0, 0, 8, 3, 2), chunks: Vec::new(), tiled: true }.tag(322, SHORT, &[16]).tag(323, SHORT, &[16]);
+    let pyramid_dirs = || [(8u32, 0u8), (4, 20), (2, 40), (1, 60)].map(|(s, v)| level(s, s, [200, 100, v], 16)).to_vec();
+    let mut after = pyramid_dirs();
+    after.push(empty());
+    let mut before = vec![empty()];
+    before.extend(pyramid_dirs());
+    for (what, dirs) in [("after", after), ("before", before)] {
+        let chain: Vec<usize> = (0..dirs.len()).collect();
+        let r = photocraft_io::import("pages.tx", &build(true, false, &dirs, &chain).bytes).unwrap();
+        assert_eq!((r.document.size.width, r.document.size.height), (8, 8), "{what}");
+        assert!(r.warnings.iter().any(|w| w.starts_with("only the first of")), "{what}: {:?}", r.warnings);
+    }
+}
+
 #[test]
 fn a_single_level_tx_opens_read_only() {
     let bytes = build(false, false, &[level(8, 8, [1, 2, 3], 16)], &[0]).bytes;
