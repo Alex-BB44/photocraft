@@ -1457,7 +1457,7 @@ impl PhotocraftApp {
     /// which writes whichever file the action is played on, not as a Save As to a fixed path.
     pub(crate) fn save_dialog_flow(&mut self, path: Option<String>, tga_bits: Option<photocraft_io::TgaBits>, plain_save: bool) -> Result<Value, String> {
         if self.save_options_open() {
-            return Err("Answer TIFF or Targa Options before starting another save".into());
+            return Err(SAVE_OPTIONS_OPEN.into());
         }
         // Edit Contents documents save back into their smart object.
         if path.is_none() && self.session.is_enabled("layer.smartObjects.saveContents") {
@@ -1541,7 +1541,7 @@ impl PhotocraftApp {
     /// File › Save back to the document's own layered file, recorded as a `file.save` step.
     pub(crate) fn save_in_place(&mut self, path: String) -> Result<Value, String> {
         if self.save_options_open() {
-            return Err("Answer TIFF or Targa Options before starting another save".into());
+            return Err(SAVE_OPTIONS_OPEN.into());
         }
         let r = self.write_save(path, None, None)?;
         self.session.journal.push(("file.save".into(), Value::Object(Default::default())));
@@ -1578,7 +1578,7 @@ impl PhotocraftApp {
     /// recorded TIFF or Targa answer (if any) stands in for the TIFF or Targa Options prompt.
     pub(crate) fn replay_save(&mut self, id: &str, params: &Value) -> Result<Value, String> {
         if self.save_options_open() {
-            return Err("Answer TIFF or Targa Options before starting another save".into());
+            return Err(SAVE_OPTIONS_OPEN.into());
         }
         if id == "file.save" {
             // The file the action is played on: one that holds the whole document, or a flat
@@ -1756,7 +1756,7 @@ impl PhotocraftApp {
         own == path && self.services.file_stamp.as_ref().and_then(|stamp| stamp(path)).is_some_and(|now| now != *then)
     }
 
-    /// TIFF Options or Targa Options is waiting on an answer before a save is written.
+    /// TIFF Options, Targa Options or TX Options is waiting on an answer before a save is written.
     pub(crate) fn save_options_open(&self) -> bool {
         self.tiff_options.is_some() || self.targa_options.is_some() || self.tx_options.is_some()
     }
@@ -2627,6 +2627,9 @@ const ADDS_LAYER_MASK: [&str; 5] = [
 ];
 
 /// The New Document dialog's key in the preferences' `dialogs` map.
+/// Why a save is refused while TIFF, Targa or TX Options waits on an answer ([`PhotocraftApp::save_options_open`]).
+pub(crate) const SAVE_OPTIONS_OPEN: &str = "Answer TIFF, Targa or TX Options before starting another save";
+
 const NEW_DOCUMENT: &str = "file.new";
 
 /// New Document fields its OK remembers (#1810): the size, resolution, mode, depth, background and

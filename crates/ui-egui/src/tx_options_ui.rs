@@ -37,7 +37,7 @@ pub fn is_tx_path(path: &str) -> bool {
 /// V-Ray preset). A prompt already waiting is never replaced.
 pub fn park(app: &mut PhotocraftApp, path: String, record: &'static str) -> Result<(), String> {
     if app.save_options_open() {
-        return Err("Answer TIFF, Targa or TX Options before starting another save".into());
+        return Err(crate::SAVE_OPTIONS_OPEN.into());
     }
     let doc = app.active_doc_id()?;
     let doc_float = app.session.active().is_some_and(|st| st.doc.pixel_format().sample == photocraft_color::SampleType::F32);
