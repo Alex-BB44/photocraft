@@ -376,7 +376,7 @@ pub fn document_to_image(doc: &Document, warnings: &mut Vec<String>) -> Result<I
 }
 
 /// `cmyk_target` / `lab_target`: the format stores CMYK / Lab pixels.
-fn document_to_image_for(doc: &Document, warnings: &mut Vec<String>, cmyk_target: bool, lab_target: bool) -> Result<Image, IoError> {
+pub(crate) fn document_to_image_for(doc: &Document, warnings: &mut Vec<String>, cmyk_target: bool, lab_target: bool) -> Result<Image, IoError> {
     let (w, h) = (doc.size.width, doc.size.height);
     let canvas = doc.bounds();
     let fmt = doc.pixel_format();
@@ -806,7 +806,7 @@ fn convert_from(
 
 /// Colour-managed CMYK → sRGB for formats that cannot store CMYK (the document's embedded
 /// CMYK profile when it parses, else the built-in coated CMYK; relative colorimetric + BPC).
-fn cmyk_image_to_srgb(img: &Image) -> Result<Image, IoError> {
+pub(crate) fn cmyk_image_to_srgb(img: &Image) -> Result<Image, IoError> {
     use photocraft_cms::{Builtin, ColorSpace, Intent, Profile, Transform};
     let src = img
         .icc

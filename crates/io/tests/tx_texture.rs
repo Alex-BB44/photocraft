@@ -142,8 +142,15 @@ fn a_tx_that_is_not_a_tiff_is_left_to_the_other_readers() {
 }
 
 #[test]
-fn saving_as_tx_is_refused_rather_than_writing_a_plain_tiff() {
+fn saving_as_tx_writes_a_texture_never_a_plain_tiff() {
+    // Saving a `.tx` writes a tiled MIP chain down to 1×1 (`photocraft_io` tx), never the
+    // single-strip TIFF the TIFF codec would write under a texture's name.
     let bytes = pyramid(true, false, 8, 8);
     let doc = photocraft_io::import("t.tx", &bytes).unwrap().document;
-    assert!(photocraft_io::export(&doc, "t.tx", &photocraft_io::ExportOptions::default()).is_err());
+    let out = photocraft_io::export(&doc, "t.tx", &photocraft_io::ExportOptions::default()).unwrap().bytes;
+    let info = photocraft_codecs::tiff_info(&out).unwrap();
+    assert!(info.pages.len() > 1, "a MIP chain, not one page");
+    assert!(info.pages.iter().all(|p| p.tiled), "every level tiled");
+    assert_eq!(info.pages.last().map(|p| (p.width, p.height)), Some((1, 1)));
+    assert!(photocraft_io::import("again.tx", &out).unwrap().source_read_only);
 }

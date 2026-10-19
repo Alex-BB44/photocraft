@@ -101,6 +101,8 @@ const SAVE_FILTERS: &[(&str, &[&str])] = &[
     ("OpenEXR", &["exr"]),
     ("FITS", &["fits", "fit"]),
     ("DPX", &["dpx"]),
+    // A tiled, MIP-mapped render texture (maketx's .tx), written as a copy after TX Options.
+    ("TX (optimized for rendering)", &["tx"]),
 ];
 
 /// Non-document files the shell saves (Swatches panel exports): offered alone, so the dialog
@@ -886,8 +888,8 @@ mod tests {
     /// Every flat format Save As offers is one PhotoCraft writes, and ICO is among them (#4357).
     #[test]
     fn save_as_offers_only_writable_formats_including_ico() {
-        // Layered formats, and PDF, are written by `photocraft-io`, not a codec.
-        let layered = ["psd", "psb", "pcraft", "ora", "pdf"];
+        // Layered formats, PDF and .tx textures are written by `photocraft-io`, not a codec.
+        let layered = ["psd", "psb", "pcraft", "ora", "pdf", "tx"];
         for (name, exts) in SAVE_FILTERS {
             for ext in exts.iter().filter(|e| !layered.contains(e)) {
                 let format = photocraft_codecs::from_extension(ext).unwrap_or_else(|| panic!("{name}: .{ext} is no known format"));

@@ -213,6 +213,7 @@ pub mod tiff_options_ui;
 mod tile_overlay;
 mod timeline_ui;
 mod titlebar;
+pub mod tx_options_ui;
 pub use titlebar::{Caption, CaptionFamily, CaptionIcon, CaptionIcons, CaptionStyle, RenderIconFn};
 pub mod tone;
 mod tool_cursor;
@@ -272,6 +273,8 @@ pub struct ExportSettings {
     /// Targa: bits per pixel from Targa Options or Export As (`None`: 32 with an alpha channel or
     /// transparency, else 24).
     pub tga_bits: Option<photocraft_io::TgaBits>,
+    /// `.tx` texture: the TX Options answer (`None`: the V-Ray preset; see `tx_options_ui`).
+    pub tx: Option<photocraft_io::TxOptions>,
     /// PSD/PSB: embed a thumbnail (Preferences › File Handling › Image Previews; see
     /// [`PhotocraftApp::save_settings`]).
     pub image_previews: bool,
@@ -298,6 +301,7 @@ impl Default for ExportSettings {
             tiff_layers: true,
             xmp_all: true,
             tga_bits: None,
+            tx: None,
             image_previews: true,
             psd_maximize_compatibility: true,
             embed_icc: true,
@@ -324,6 +328,7 @@ impl ExportSettings {
         opts.tiff_layers = self.tiff_layers;
         opts.xmp = if self.xmp_all { photocraft_io::XmpEmbed::All } else { photocraft_io::XmpEmbed::None };
         opts.tga_bits = self.tga_bits;
+        opts.tx = self.tx.clone();
         opts.image_previews = self.image_previews;
         opts.psd_maximize_compatibility = self.psd_maximize_compatibility;
         opts.document_path = self.document_path.clone();
@@ -835,6 +840,10 @@ pub struct PhotocraftApp {
     pub(crate) disk_stamps: HashMap<photocraft_doc::DocId, (String, FileStamp)>,
     /// A save to an RGB Targa parked behind the Targa Options prompt (see `targa_options_ui`).
     pub(crate) targa_options: Option<targa_options_ui::Prompt>,
+    /// A save to a `.tx` texture parked behind the TX Options prompt (see `tx_options_ui`).
+    pub(crate) tx_options: Option<tx_options_ui::Prompt>,
+    /// The last TX Options answer, where the next prompt starts. Session-only.
+    pub(crate) tx_last: Option<photocraft_io::TxOptions>,
     /// Files read but not opened yet: the first waits on its profile prompt, the rest behind it
     /// (see `open_prompt`).
     pub(crate) held_opens: std::collections::VecDeque<open_prompt::Held>,
@@ -986,6 +995,8 @@ impl PhotocraftApp {
             save_dirs: HashMap::new(),
             disk_stamps: HashMap::new(),
             targa_options: None,
+            tx_options: None,
+            tx_last: None,
             held_opens: Default::default(),
             allow_close: false,
             stylus: Default::default(),
@@ -1505,6 +1516,11 @@ impl PhotocraftApp {
 
     /// [`Self::save_as_with`] once the path is known.
     pub(crate) fn save_to(&mut self, path: String, tga_bits: Option<photocraft_io::TgaBits>) -> Result<Value, String> {
+        // A `.tx` render texture asks for its TX Options; the copy is written from the prompt.
+        if tx_options_ui::is_tx_path(&path) {
+            tx_options_ui::park(self, path.clone(), "file.saveAs")?;
+            return Ok(serde_json::json!({"path": path, "warnings": []}));
+        }
         // An RGB Targa asks for its bits per pixel, unless the caller chose them; the save
         // continues from the prompt (still a copy when it would be one without the prompt),
         // which records the step once answered.
@@ -1619,6 +1635,10 @@ impl PhotocraftApp {
         // An OpenRaster file that can't hold everything (adjustment layers, styles…) is a copy too,
         // so the editable document isn't marked saved after losing them (#3806).
         let st = self.session.active().ok_or("no document")?;
+        // A render texture is an export: never the document's own file (it opens read-only too).
+        if tx_options_ui::is_tx_path(path) {
+            return Ok(true);
+        }
         let tiff = |p: &str| matches!(photocraft_engine::file_cmds::extension(p).as_deref(), Some("tif" | "tiff"));
         let holds = photocraft_engine::file_cmds::holds_at(&st.doc, path) || tiff(path);
         let lives_layered = st.path.as_deref().is_some_and(|p| photocraft_engine::file_cmds::saves_in_place(p) || tiff(p));
@@ -1738,7 +1758,7 @@ impl PhotocraftApp {
 
     /// TIFF Options or Targa Options is waiting on an answer before a save is written.
     pub(crate) fn save_options_open(&self) -> bool {
-        self.tiff_options.is_some() || self.targa_options.is_some()
+        self.tiff_options.is_some() || self.targa_options.is_some() || self.tx_options.is_some()
     }
 
     /// A print worker may still be handing a job to the system queue.
@@ -2083,6 +2103,7 @@ impl eframe::App for PhotocraftApp {
         discard_ui::show(self, &ctx);
         tiff_options_ui::show(self, &ctx);
         targa_options_ui::show(self, &ctx);
+        tx_options_ui::show(self, &ctx);
         distort_ui::show(self, &ctx);
         camera_raw_ui::show(self, &ctx);
         wide_angle_ui::show(self, &ctx);

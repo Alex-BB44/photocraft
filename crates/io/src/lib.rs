@@ -65,6 +65,9 @@ pub mod svg;
 mod text_import;
 pub mod text_styles_map;
 pub mod tiff_layers;
+mod tx;
+pub use photocraft_codecs::TxWrap;
+pub use tx::{TX_TILE_SIZES, TxDataType, TxFilter, TxFixNan, TxOptions, TxPreset};
 pub mod vector_map;
 
 pub use photocraft_codecs::DpxBits;
@@ -184,6 +187,9 @@ pub struct ExportOptions {
     /// PSD/PSB: embed the thumbnail image resource (1036), Preferences › File Handling › Image
     /// Previews. On by default, as Photoshop's Always Save.
     pub image_previews: bool,
+    /// `.tx` texture: the TX Options answer. `None` writes [`TxOptions::default`] (the V-Ray
+    /// preset), so scripted saves and the CLI write the same texture as the dialog's default.
+    pub tx: Option<TxOptions>,
     /// PSD/PSB: write the real merged image, Preferences › File Handling › Maximize PSD and PSB
     /// File Compatibility (see [`PsdExportOptions::maximize_compatibility`]). On by default, as
     /// Photoshop's Always.
@@ -202,6 +208,7 @@ impl Default for ExportOptions {
             xmp: XmpEmbed::All,
             tga_bits: None,
             image_previews: true,
+            tx: None,
             psd_maximize_compatibility: true,
             document_path: None,
         }
@@ -453,6 +460,11 @@ fn export_stages(doc: &Document, name_or_ext: &str, opts: &ExportOptions, ctl: &
         file.header.validate()?;
         let bytes = file.to_bytes()?;
         return Ok(ExportResult { bytes, warnings });
+    }
+    if ext == "tx" {
+        // A texture, not a TIFF save: `.tx` is deliberately not one of TIFF's extensions, so
+        // only this path writes it (tiled, MIP-mapped; see `tx`).
+        return tx::export_tx(doc, &opts.tx.clone().unwrap_or_default(), ctl);
     }
     let format = photocraft_codecs::from_extension(&ext).ok_or_else(|| IoError::UnknownFormat(name_or_ext.to_string()))?;
     if format == photocraft_codecs::Format::Tiff && opts.tiff_layers && tiff_layers::would_write_layers(doc) {
